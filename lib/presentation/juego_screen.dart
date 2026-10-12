@@ -1,15 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../logica/motor_juego.dart';
-import '../logica/personaje.dart';
-import '../logica/momia.dart';
-import '../logica/calaverita.dart';
-import '../logica/rectangulo.dart';
+import '../data/almacen_puntaje_prefs.dart';
 import '../logica/estado_juego.dart';
+import '../logica/mejor_puntaje.dart';
+import '../logica/motor_juego.dart';
+import '../logica/niveles.dart';
+import 'hud_vidas.dart';
 
 class JuegoScreen extends StatefulWidget {
-  const JuegoScreen({super.key});
+  /// Nivel con el que arranca (0 = nivel 1). Util para depurar y tomar capturas.
+  final int nivelInicial;
+
+  /// Posicion horizontal inicial opcional del personaje (solo depuracion).
+  final double? xInicial;
+
+  const JuegoScreen({super.key, this.nivelInicial = 0, this.xInicial});
 
   @override
   State<JuegoScreen> createState() => _JuegoScreenState();
@@ -17,37 +23,29 @@ class JuegoScreen extends StatefulWidget {
 
 class _JuegoScreenState extends State<JuegoScreen> {
   late MotorJuego _motor;
+  final _mejorPuntaje = GestorMejorPuntaje(AlmacenPuntajePrefs());
   Timer? _bucle;
   double _direccion = 0;
+  int _nivel = 0;
+  int _acumulado = 0; // puntos de los niveles ya superados
+
+  int get _puntajeTotal => _acumulado + _motor.puntaje;
 
   @override
   void initState() {
     super.initState();
+    _nivel = widget.nivelInicial.clamp(0, Niveles.total - 1);
     _iniciarNivel();
+    if (widget.xInicial != null) _motor.personaje.x = widget.xInicial!;
     _iniciarBucle();
+    _mejorPuntaje.cargar().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   void _iniciarNivel() {
     _direccion = 0;
-    _motor = MotorJuego(
-      personaje: Personaje(x: 20, y: 100),
-      plataformas: const [
-        Rectangulo(x: 0, y: 300, ancho: 2000, alto: 40),
-        Rectangulo(x: 300, y: 220, ancho: 120, alto: 20),
-        Rectangulo(x: 550, y: 160, ancho: 120, alto: 20),
-      ],
-      momias: [
-        Momia(x: 320, y: 268, limiteIzquierdo: 300, limiteDerecho: 420),
-        Momia(x: 900, y: 268, limiteIzquierdo: 850, limiteDerecho: 1100),
-      ],
-      calaveritas: [
-        Calaverita(x: 360, y: 180),
-        Calaverita(x: 600, y: 120),
-        Calaverita(x: 1200, y: 260),
-      ],
-      posicionMeta: 1900,
-      anchoNivel: 2000,
-    );
+    _motor = Niveles.crear(_nivel);
   }
 
   void _iniciarBucle() {
@@ -70,7 +68,7 @@ class _JuegoScreenState extends State<JuegoScreen> {
       setState(() => _motor.mover(direccion * 4));
       if (_motor.estado != EstadoJuego.jugando) {
         _bucle?.cancel();
-        _mostrarResultado();
+        _terminarNivel();
       }
     });
   }
@@ -81,8 +79,24 @@ class _JuegoScreenState extends State<JuegoScreen> {
     super.dispose();
   }
 
-  void _mostrarResultado() {
+  Future<void> _terminarNivel() async {
     final gano = _motor.estado == EstadoJuego.ganado;
+    final esRecord = await _mejorPuntaje.registrar(_puntajeTotal);
+    if (!mounted) return;
+    setState(() {});
+    final hayOtroNivel = _nivel + 1 < Niveles.total;
+    final String titulo;
+    final String boton;
+    if (!gano) {
+      titulo = 'Las momias te atraparon';
+      boton = 'Reintentar nivel';
+    } else if (hayOtroNivel) {
+      titulo = '¡Llegaste al Callejón del Beso!';
+      boton = 'Siguiente nivel';
+    } else {
+      titulo = '¡Completaste todos los niveles!';
+      boton = 'Jugar de nuevo';
+    }
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
@@ -94,16 +108,30 @@ class _JuegoScreenState extends State<JuegoScreen> {
         child: FadeTransition(
           opacity: anim1,
           child: AlertDialog(
-            title: Text(gano ? '¡Llegaste al Callejón del Beso!' : 'Las momias te atraparon'),
-            content: Text('Puntaje: ${_motor.puntaje}'),
+            title: Text(titulo),
+            content: Text(
+              'Puntaje: $_puntajeTotal\nRécord: ${_mejorPuntaje.mejor}'
+              '${esRecord ? '\n¡Nuevo récord!' : ''}',
+            ),
             actions: [
               TextButton(
                 onPressed: () {
                   Navigator.pop(context);
-                  setState(_iniciarNivel);
+                  setState(() {
+                    if (!gano) {
+                      // reintenta el mismo nivel conservando lo acumulado antes de entrar
+                    } else if (hayOtroNivel) {
+                      _acumulado = _puntajeTotal;
+                      _nivel++;
+                    } else {
+                      _acumulado = 0;
+                      _nivel = 0;
+                    }
+                    _iniciarNivel();
+                  });
                   _iniciarBucle();
                 },
-                child: const Text('Jugar de nuevo'),
+                child: Text(boton),
               ),
             ],
           ),
@@ -120,7 +148,7 @@ class _JuegoScreenState extends State<JuegoScreen> {
         .toDouble();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Momias de Guanajuato')),
+      appBar: AppBar(title: Text('Momias de Guanajuato · Nivel ${_nivel + 1}')),
       body: Column(
         children: [
           Padding(
@@ -128,8 +156,8 @@ class _JuegoScreenState extends State<JuegoScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Vidas: ${_motor.vidas}'),
-                Text('Puntaje: ${_motor.puntaje}'),
+                HudVidas(vidas: _motor.vidas, maximo: 3),
+                Text('Puntaje: $_puntajeTotal   Récord: ${_mejorPuntaje.mejor}'),
               ],
             ),
           ),

@@ -31,7 +31,7 @@ lib/
   presentation/
     juego_screen.dart    cámara lateral, sprites, controles
   main.dart
-test/                    5 archivos, 23 pruebas
+test/                    10 archivos, 49 pruebas (23 del manual + 26 de los retos)
 ```
 
 ## TDD: las 10 rondas (Rojo → Verde)
@@ -49,7 +49,7 @@ test/                    5 archivos, 23 pruebas
 | 9 | Vidas y Game Over | `motor_juego_test.dart` |
 | 10 | `MotorJuego` + prueba de integración (ganar) | `motor_juego_test.dart` |
 
-Resultado de `flutter test`: **23 pruebas, todas en verde**.
+Resultado de `flutter test` con solo las 10 rondas: **23 pruebas, todas en verde** (49 al sumar los retos, ver más abajo).
 
 ### Ajustes respecto al manual
 
@@ -61,7 +61,7 @@ Algunos datos de prueba del manual no podían pasar tal cual y se corrigieron:
 - `clamp` devuelve `num`; se agregó `.toDouble()` en la cámara.
 - Se agregó control por teclado (el manual solo traía botones táctiles).
 
-## Capturas de pantalla
+## Capturas de pantalla (versión base, antes de los retos)
 
 | Inicio | Saltando y calaverita (50 pts) |
 |---|---|
@@ -83,6 +83,32 @@ flutter test
 flutter run -d chrome
 ```
 
-## Retos de extensión (pendientes)
+## Retos de extensión (los 5, hechos con TDD)
 
-Colisión lateral con plataformas, corazones en el HUD, momia vertical, mejor puntaje con `shared_preferences` y un segundo nivel.
+Cada reto se escribió primero como prueba y luego se implementó. Con ellos el proyecto pasa a **49 pruebas en verde**.
+
+| Reto | Qué se hizo | Prueba |
+|---|---|---|
+| Colisión lateral con plataformas | `MotorFisica.resolverColisionLateral(personaje, plataformas, xAnterior)`, con el mismo patrón de "costura testable" que `resolverColisionConPiso`. `MotorJuego.mover()` la llama justo después de mover en horizontal. | `colision_lateral_test.dart` (5) |
+| Corazones en el HUD | Widget `HudVidas` (corazón lleno por vida, vacío por vida perdida). | `hud_vidas_test.dart` (3) |
+| Momia vertical | La misma clase `Momia` con `limiteArriba` / `limiteAbajo` / `velocidadY` y el constructor `Momia.vertical(...)`. | `momia_vertical_test.dart` (6) |
+| Mejor puntaje con `shared_preferences` | `GestorMejorPuntaje` (lógica pura) + interfaz `AlmacenPuntaje`; `AlmacenPuntajePrefs` es la implementación con `shared_preferences`. Las pruebas usan un almacén en memoria. | `mejor_puntaje_test.dart` (5) |
+| Segundo nivel | `Niveles.crear(i)` devuelve un `MotorJuego` nuevo: el nivel 2 es más largo (3200 px), con más plataformas, muros, 6 momias (una vertical) y 9 calaveritas. Reutiliza exactamente el mismo `MotorJuego`. | `niveles_test.dart` (7) |
+
+Al ganar el nivel 1 aparece **Siguiente nivel**; el puntaje se acumula entre niveles y el récord se guarda al terminar cada partida.
+
+Para depurar o tomar capturas, en web se puede abrir en un nivel y posición concretos: `?nivel=2&x=1700`.
+
+### Capturas de los retos
+
+| Nivel 2: arranque con muro | Colisión lateral: el muro frena al personaje |
+|---|---|
+| ![Nivel 2](docs/capturas/6_nivel2_inicio_muro.png) | ![Pared](docs/capturas/7_colision_lateral_pared.png) |
+
+| HUD con corazones (2 de 3) | Momia vertical (arriba a la derecha) |
+|---|---|
+| ![HUD](docs/capturas/8_hud_corazones.png) | ![Momia vertical](docs/capturas/9_momia_vertical.png) |
+
+| Nuevo récord guardado |
+|---|
+| ![Récord](docs/capturas/10_nuevo_record.png) |
