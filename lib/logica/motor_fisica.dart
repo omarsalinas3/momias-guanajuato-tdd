@@ -43,6 +43,20 @@ class MotorFisica {
     }
   }
 
+  /// Costura testable: [xAnterior] indica de que lado venia el personaje
+  /// para saber contra que borde de la plataforma debe detenerse.
+  static void resolverColisionLateral(Personaje personaje, List<Rectangulo> plataformas, double xAnterior) {
+    if (personaje.x == xAnterior) return;
+    for (final plataforma in plataformas) {
+      if (!personaje.rectangulo.intersectaCon(plataforma)) continue;
+      if (personaje.x > xAnterior) {
+        personaje.x = plataforma.x - personaje.ancho;
+      } else {
+        personaje.x = plataforma.x + plataforma.ancho;
+      }
+    }
+  }
+
   static bool haLlegadoALaMeta(Personaje personaje, double posicionMeta) {
     return personaje.x >= posicionMeta;
   }
